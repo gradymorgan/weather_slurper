@@ -1,0 +1,11 @@
+{
+  "name": "weather_slurper",
+  "description": "",
+  "version": "0.0.1",
+  "keywords": [],
+  "dependencies": {
+    "body-parser": "^1.18.3",
+    "express": "^4.16.3",
+    "influx": "^5.0.7"
+  }
+}

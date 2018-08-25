@@ -1,9 +1,10 @@
 var dgram = require('dgram');
+var EventEmitter = require('events');
 
 var express = require("express");
 var bodyParser = require("body-parser");
 
-var rest_app 
+var Influx = require('influx');
 
 function initRestAPI() {
 	var app = express();
@@ -18,13 +19,36 @@ function initRestAPI() {
 	return app;
 }
 
-function main() {
-	influxDBPump();
+function initInflux() {
+	var influx = new Influx.InfluxDB({
+		host: '192.168.7.101',
+		port: 8086,
+	    database: 'weather'
+	});
 
-	weatherflowListener();
-	purpleListener();
+	return influx;
 }
 
+function main() {
+	var influx = initInflux();
+
+	var messagePump = new EventEmitter();
+	messagePump.on('sample', function(data) {
+		influx.writePoints(data.map(function(d) {
+				console.info(d);
+				return {
+    			measurement: d.measurement,
+    			tags: { source: d.source },
+    			fields: { units: d.units, value: d.value },
+    			timestamp: d.time
+	    		};
+  			}));
+	});
+
+	weatherflowListener(messagePump, null, null);
+	//purpleListener();
+}
+main();
 
 function weatherflowListener(pump, server, options) {
 	var PORT = 50222;
@@ -32,14 +56,22 @@ function weatherflowListener(pump, server, options) {
 
 	server.on('listening', function () {
 	    var address = server.address();
-	    // console.log('UDP Server listening on ' + address.address + ":" + address.port);
+	    console.log('UDP Server listening on :' + PORT);
 	});
 
 	server.on('message', function (message, remote) {
-	    // var type = message.type;
-	    // parser lookup
-	    // for each, pump event
-	    // pump.emit('', '');
+	    message = JSON.parse(message);
+	    console.log('weather flow message, type: '+message.type);
+	    var type = message.type;
+	    var data;
+
+	    if (type == 'obs_air')
+	    	data = parseWeatherFlowAirReport(message);
+	    else if (type == 'obs_sky')
+	    	data = parseWeatherFlowSkyReport(message);
+
+	    if (data)
+	    	pump.emit('sample', data);
 
 	});
 
@@ -57,6 +89,7 @@ function purpleListener(pump, restApi, options) {
 	});
 }
 
+// https://weatherflow.github.io/SmartWeather/api/udp/v91/
 // {"serial_number":"AR-00012490","type":"obs_air","hub_sn":"HB-00004837","obs":[[1534912506,1005.70,21.38,68,0,0,3.51,1]],"firmware_revision":20}
 // 0	Time Epoch	Seconds
 // 1	Station Pressure	MB
@@ -68,15 +101,16 @@ function purpleListener(pump, restApi, options) {
 // 7	Report Interval	Minutes
 
 function parseWeatherFlowAirReport(message) {
-	var time_epoch = message.obs[0];
-	var pressure = message.obs[1];
-	var temp = message.obs[2];
-	var humidity = station.obs[3];
+	var obs = message.obs[0];
+	var time_epoch = new Date(obs[0]*1000);
+	var pressure = obs[1];
+	var temp = obs[2];
+	var humidity = obs[3];
 
 	return [
-		{measurement:'temp', value: temp, units: 'C', time: time_epoch},
-		{measurement:'pressure', value: pressure, units: 'MB', time: time_epoch},
-		{measurement:'humidity', value: humidity, units: '%', time: time_epoch},
+		{measurement:'temp', source: "WeatherFlow Air", source_id: message.serial_number, value: temp, units: 'C', time: time_epoch},
+		{measurement:'pressure', source: "WeatherFlow Air", source_id: message.serial_number, value: pressure, units: 'MB', time: time_epoch},
+		{measurement:'humidity', source: "WeatherFlow Air", source_id: message.serial_number, value: humidity, units: '%', time: time_epoch},
 	];
 }
 
@@ -96,16 +130,18 @@ function parseWeatherFlowAirReport(message) {
 // 12	Precipitation Type	0 = none, 1 = rain, 2 = hail
 // 13	Wind Sample Interval	seconds
 function parseWeatherFlowSkyReport(message) {
-	var time_epoch = message.obs[0];
-	var pressure = message.obs[1];
-	var temp = message.obs[2];
-	var humidity = station.obs[3];
+	var obs = message.obs[0];
+	var time_epoch = new Date(obs[0]*1000);
+	var wind = obs[1];
+	var UV = obs[2];
+	var illuminance = obs[1];
+	var rain = obs[3];
 
 	return [
-		{measurement:'wind', value: temp, units: 'tbd', time: time_epoch},
-		{measurement:'UV', value: pressure, units: 'Index', time: time_epoch},
-		{measurement:'illuminance', value: humidity, units: 'Lux', time: time_epoch},
-		{measurement:'rain', value: humidity, units: 'mm', time: time_epoch},
+		//{measurement:'wind', source: "WeatherFlow Sky", source_id: message.serial_number, value: wind, units: 'tbd', time: time_epoch},
+		{measurement:'UV', source: "WeatherFlow Sky", source_id: message.serial_number, value: UV, units: 'Index', time: time_epoch},
+		{measurement:'illuminance', source: "WeatherFlow Sky", source_id: message.serial_number, value: illuminance, units: 'Lux', time: time_epoch},
+		{measurement:'rain', source: "WeatherFlow Sky", source_id: message.serial_number, value: rain, units: 'mm', time: time_epoch},
 	];	
 }
 
@@ -113,6 +149,7 @@ function parseWeatherFlowSkyReport(message) {
 // {"serial_number":"HB-00004837","type":"hub_status","firmware_revision":"91","uptime":494815,"rssi":-73,"timestamp":1534912520,"reset_flags":"PIN,SFT","seq":49375,"fs":"1,0","radio_stats":[2,1],"mqtt_stats":[40]}
 function parseWeatherFlowTodo() {}
 
+// https://docs.google.com/document/d/15ijz94dXJ-YAZLi9iZ_RaBwrZ4KtYeCy08goGBwnbCU/edit
 /*
 { SensorId: '68:c6:3a:8e:7a:22',
   DateTime: '2018/08/22T03:18:47z',
@@ -177,7 +214,7 @@ function parseWeatherFlowTodo() {}
 function parsePurpleAirReport(message) {
 
 	return [
-		{measurement:'PM2.5 AQI', value: humidity, sensor:'...', units: '%', time: time_epoch},
+		{measurement:'PM2.5 AQI', value: humidity, source:'...', units: '%', time: time_epoch},
 		{measurement:'PM10 AQI', value: humidity, units: '%', time: time_epoch},
 		{measurement:'pm1', value: humidity, units: '%', time: time_epoch},
 		{measurement:'pm2.5', value: humidity, units: '%', time: time_epoch},
