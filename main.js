@@ -40,7 +40,7 @@ function main() {
 	var messagePump = new EventEmitter();
 	messagePump.on('sample', function(data) {
 		influx.writePoints(data.map(function(d) {
-//				console.info(d);
+				console.info(d);
 				return {
     			measurement: d.measurement,
     			tags: { source: d.source },
@@ -87,8 +87,8 @@ function listenToPurple(pump, restApi, options) {
 	restApi.put("/sensors/purpleair/:key", function (req, res) {
 		//key to sensor check
 
-		var message = JSON.parse(req.body);
-		var data = parsePurpleAirReport(message);
+		console.info(req.body);
+		var data = parsePurpleAirReport(req.body);
 
 		if (data) 
 			pump.emit('sample', data);
@@ -96,6 +96,7 @@ function listenToPurple(pump, restApi, options) {
 		res.status(200).send({ok: ':)'});
 	});
 }
+
 
 // https://weatherflow.github.io/SmartWeather/api/udp/v91/
 // {"serial_number":"AR-00012490","type":"obs_air","hub_sn":"HB-00004837","obs":[[1534912506,1005.70,21.38,68,0,0,3.51,1]],"firmware_revision":20}
@@ -232,16 +233,16 @@ function parsePurpleAirReport(message) {
 
 
 	return [
-		{measurement:'PM2.5 AQI', source: "Purple Air", value: pm25AQI, units: 'index', time: time},
-		{measurement:'PM10 AQI', source: "Purple Air", value: pm10AQI, units: 'index', time: time},
+		{measurement:'PM2_5_AQI', source: "Purple Air", value: pm25AQI, units: 'index', time: time},
+		{measurement:'PM10_AQI', source: "Purple Air", value: pm10AQI, units: 'index', time: time},
 		
 		{measurement:'pm1', source: "Purple Air", value: message.pm1_0_cf_1, units: 'ug/m3', time: time},
-		{measurement:'pm2.5', source: "Purple Air", value: message.pm2_5_cf_1, units: 'ug/m3', time: time},
+		{measurement:'pm2_5', source: "Purple Air", value: message.pm2_5_cf_1, units: 'ug/m3', time: time},
 		{measurement:'pm10', source: "Purple Air", value: message.pm10_0_cf_1, units: 'ug/m3', time: time},
 		
-		{measurement:'temp', source: "Purple Air", value: current_temp_f, units: 'F', time: time},
-		{measurement:'humidity', source: "Purple Air", value: current_humidity, units: '%', time: time},
-		{measurement:'pressure', source: "Purple Air", value: pressure, units: 'mB', time: time}
+		{measurement:'temp', source: "Purple Air", value: message.current_temp_f, units: 'F', time: time},
+		{measurement:'humidity', source: "Purple Air", value: message.current_humidity, units: '%', time: time},
+		{measurement:'pressure', source: "Purple Air", value: message.pressure, units: 'mB', time: time}
 	];	
 }
 
