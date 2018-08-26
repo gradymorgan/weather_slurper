@@ -5,6 +5,9 @@ var express = require("express");
 var bodyParser = require("body-parser");
 
 var Influx = require('influx');
+var moment = require('moment');
+
+var aqi = require('aqi-us');
 
 function initRestAPI() {
 	var app = express();
@@ -31,11 +34,13 @@ function initInflux() {
 
 function main() {
 	var influx = initInflux();
+	var rest_server = initRestAPI();
+
 
 	var messagePump = new EventEmitter();
 	messagePump.on('sample', function(data) {
 		influx.writePoints(data.map(function(d) {
-				console.info(d);
+//				console.info(d);
 				return {
     			measurement: d.measurement,
     			tags: { source: d.source },
@@ -45,12 +50,12 @@ function main() {
   			}));
 	});
 
-	weatherflowListener(messagePump, null, null);
-	//purpleListener();
+	listenToWeatherflow(messagePump, null, null);
+	listenToPurple(messagePump, rest_server, null);
 }
 main();
 
-function weatherflowListener(pump, server, options) {
+function listenToWeatherflow(pump, server, options) {
 	var PORT = 50222;
 	var server = dgram.createSocket('udp4');
 
@@ -61,7 +66,7 @@ function weatherflowListener(pump, server, options) {
 
 	server.on('message', function (message, remote) {
 	    message = JSON.parse(message);
-	    console.log('weather flow message, type: '+message.type);
+	    // console.log('weather flow message, type: '+message.type);
 	    var type = message.type;
 	    var data;
 
@@ -78,12 +83,15 @@ function weatherflowListener(pump, server, options) {
 	server.bind({ port: PORT });
 }
 
-function purpleListener(pump, restApi, options) {
-	app.put("/sensors/purpleair/:key", function (req, res) {
+function listenToPurple(pump, restApi, options) {
+	restApi.put("/sensors/purpleair/:key", function (req, res) {
 		//key to sensor check
 
-		//parse
-		//pump
+		var message = JSON.parse(req.body);
+		var data = parsePurpleAirReport(message);
+
+		if (data) 
+			pump.emit('sample', data);
 
 		res.status(200).send({ok: ':)'});
 	});
@@ -132,16 +140,21 @@ function parseWeatherFlowAirReport(message) {
 function parseWeatherFlowSkyReport(message) {
 	var obs = message.obs[0];
 	var time_epoch = new Date(obs[0]*1000);
-	var wind = obs[1];
 	var UV = obs[2];
 	var illuminance = obs[1];
 	var rain = obs[3];
 
+	var wind_speed = obs[5];
+	var wind_speed_gust = obs[6];
+	var wind_direction = obs[7];
+
 	return [
-		//{measurement:'wind', source: "WeatherFlow Sky", source_id: message.serial_number, value: wind, units: 'tbd', time: time_epoch},
+		{measurement:'wind_direction', source: "WeatherFlow Sky", source_id: message.serial_number, value: wind_direction, units: 'deg', time: time_epoch},
+		{measurement:'wind_speed', source: "WeatherFlow Sky", source_id: message.serial_number, value: wind_speed, units: 'm/s', time: time_epoch},
+		{measurement:'wind_speed_gust', source: "WeatherFlow Sky", source_id: message.serial_number, value: wind_speed_gust, units: 'm/s', time: time_epoch},
 		{measurement:'UV', source: "WeatherFlow Sky", source_id: message.serial_number, value: UV, units: 'Index', time: time_epoch},
 		{measurement:'illuminance', source: "WeatherFlow Sky", source_id: message.serial_number, value: illuminance, units: 'Lux', time: time_epoch},
-		{measurement:'rain', source: "WeatherFlow Sky", source_id: message.serial_number, value: rain, units: 'mm', time: time_epoch},
+		{measurement:'rain', source: "WeatherFlow Sky", source_id: message.serial_number, value: rain, units: 'mm', time: time_epoch}
 	];	
 }
 
@@ -213,14 +226,23 @@ function parseWeatherFlowTodo() {}
  */
 function parsePurpleAirReport(message) {
 
+	var time = moment(message.DateTime,'YYYY/MM/DDTHH:mm:ss').toDate();
+	var pm25AQI = aqi.pm25(message.pm2_5_cf_1);
+	var pm10AQI = aqi.pm25(message.pm10_0_cf_1);
+
+
 	return [
-		{measurement:'PM2.5 AQI', value: humidity, source:'...', units: '%', time: time_epoch},
-		{measurement:'PM10 AQI', value: humidity, units: '%', time: time_epoch},
-		{measurement:'pm1', value: humidity, units: '%', time: time_epoch},
-		{measurement:'pm2.5', value: humidity, units: '%', time: time_epoch},
-		{measurement:'pm10', value: humidity, units: '%', time: time_epoch},
-		{measurement:'temp', value: humidity, units: '%', time: time_epoch},
-		{measurement:'pressure', value: humidity, units: '%', time: time_epoch}
+		{measurement:'PM2.5 AQI', source: "Purple Air", value: pm25AQI, units: 'index', time: time},
+		{measurement:'PM10 AQI', source: "Purple Air", value: pm10AQI, units: 'index', time: time},
+		
+		{measurement:'pm1', source: "Purple Air", value: message.pm1_0_cf_1, units: 'ug/m3', time: time},
+		{measurement:'pm2.5', source: "Purple Air", value: message.pm2_5_cf_1, units: 'ug/m3', time: time},
+		{measurement:'pm10', source: "Purple Air", value: message.pm10_0_cf_1, units: 'ug/m3', time: time},
+		
+		{measurement:'temp', source: "Purple Air", value: current_temp_f, units: 'F', time: time},
+		{measurement:'humidity', source: "Purple Air", value: current_humidity, units: '%', time: time},
+		{measurement:'pressure', source: "Purple Air", value: pressure, units: 'mB', time: time}
 	];	
 }
+
 
