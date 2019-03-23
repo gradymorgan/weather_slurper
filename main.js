@@ -101,7 +101,7 @@ function listenToPurple(pump, restApi, options) {
 }
 
 function listenToAwair(pump, restApi, options) {
-    restApi.put("/sensors/awair/:key", function (req, res) {
+    restApi.put("/sensors/awair/:key", (req, res) => {
         //key to sensor check
 
         // console.info(req.body);
