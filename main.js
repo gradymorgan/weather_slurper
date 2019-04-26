@@ -15,7 +15,7 @@ function initRestAPI() {
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
 
-    var server = app.listen(3000, () => {
+    var server = app.listen(process.env.HTTP_PUT_PORT, () => {
         console.log("rest api running on port.", server.address().port);
     });
 
@@ -30,9 +30,9 @@ function initRestAPI() {
 
 function initInflux() {
     var influx = new Influx.InfluxDB({
-        host: 'influxdb',
-        port: 8086,
-        database: 'weather'
+        host: process.env.INFLUX_HOST,
+        port: process.env.INFLUX_PORT,
+        database: process.env.INFLUX_DB
     });
 
     return influx;
@@ -61,7 +61,7 @@ function main() {
 main();
 
 function listenToWeatherflow(pump, server, options) {
-    var PORT = 50222;
+    var PORT = process.env.WEATHERFLOW_PORT;
     var server = dgram.createSocket('udp4');
 
     server.on('listening', () => {

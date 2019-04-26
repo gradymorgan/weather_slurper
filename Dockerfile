@@ -1,5 +1,12 @@
 FROM node:8
 
+ENV INFLUX_HOST influxdb
+ENV INFLUX_PORT 8086
+ENV INFLUX_DB weather
+
+ENV WEATHERFLOW_PORT 50222
+ENV HTTP_PUT_PORT 3000
+
 # Create app directory
 WORKDIR /usr/src/app
 
