@@ -15,11 +15,12 @@ function initRestAPI() {
     app.use(bodyParser.json());
     app.use(bodyParser.urlencoded({ extended: true }));
 
-    var server = app.listen(3000, function () {
+    var server = app.listen(3000, () => {
         console.log("rest api running on port.", server.address().port);
     });
 
-    app.use(function(req, res, next) {
+    //debug requests made. 
+    app.use( (req, res, next) => {
         console.log('requested ' + req.originalUrl);
         next();
     });
@@ -43,7 +44,7 @@ function main() {
 
 
     var messagePump = new EventEmitter();
-    messagePump.on('sample', function(data) {
+    messagePump.on('sample', (data) => {
         influx.writePoints(data.map( (d) => {
             return {
                 measurement: d.measurement,
@@ -67,7 +68,7 @@ function listenToWeatherflow(pump, server, options) {
         console.log('UDP Server listening on :' + PORT);
     });
 
-    server.on('message', function (message, remote) {
+    server.on('message', (message, remote) => {
         message = JSON.parse(message);
         // console.log('weather flow message, type: '+message.type);
         var type = message.type;
